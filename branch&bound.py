@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Dec 16 14:57:29 2018
-
+Created on Dec 2018
 Author: John Pougué Biyong
-Contact: jpougue@gmail.com
+Contact: john.pougue-biyong@maths.ox.ac.uk
 
 This script aims at optimizing shift schedulling under stochastic demand
-by using a branch-and-bound technique coupled with simulation.
+by using a simulation-based branch-and-bound technique introduced by Defraeye et al. (2015)
+Please refer to project report for further details.
 
-This script is inspired from Defraeye et al. (2015).
 """
-    
+
 import numpy as np
 from copy import deepcopy
 import pulp as plp
 import time as timeLib
-
-""" Branch-and-bound methods """
 
 class Node:
     
@@ -68,9 +65,7 @@ class Node:
         variables = plp.LpVariable.dicts("shift", list(d), 0)
         
         # Objective function
-        scp += plp.lpSum(
-                [shiftCosts[int(i[-1])-1]*variables[i] for i in variables]
-                )
+        scp += plp.lpSum([shiftCosts[int(i[-1])-1]*variables[i] for i in variables])
         
         # Constraints
         for i in range(nbIntervals):
@@ -113,7 +108,28 @@ class Node:
         scp.solve()
         
         return plp.value(scp.objective), [v.varValue for v in scp.variables()]
+
+class Customer:
     
+    def __init__(self, shape, scale, arrival_time, service_start_time=None,
+                 service_end_time=None, wait=None):
+        
+        self.arrival_time = arrival_time
+        self.service_start_time =  service_start_time
+        self.service_time = generate_service_time(shape, scale)
+        self.service_end_time = service_start_time
+        self.wait = wait
+
+    def print_details(self):
+        """ Prints the details of the node. """
+        
+        print("arrival_time:", self.arrival_time)
+        print("service_start_time:", self.service_start_time)
+        print("service_time:", self.service_time)
+        print("service_end_time:", self.service_end_time)
+        print("wait:", self.wait)
+        
+""" Branch-and-bound methods """
 
 def Backtrack(s, d, currentNode, sUB, sLB):
     """ Returns to previous level and proceeds with next node. """
@@ -132,8 +148,6 @@ def Backtrack(s, d, currentNode, sUB, sLB):
                                )   
             except:
                 currentNode.print_details()
-                print(s[:d], d)   
-                d = 'caca'
             s[d] = deepcopy(s[d]) + 1
       
     return s, d, currentNode
@@ -159,7 +173,6 @@ def Branch(i, s, currentNode, sUB, sLB):
     
     return s, dNew, currentNode
 
-
 """ Simulation methods """
 
 def generate_service_time(shape, scale):
@@ -168,28 +181,8 @@ def generate_service_time(shape, scale):
     
     return  np.random.gamma(shape, scale, 1)
 
-class Customer:
-    
-    def __init__(self, shape, scale, arrival_time, service_start_time=None,
-                 service_end_time=None, wait=None):
-        
-        self.arrival_time = arrival_time
-        self.service_start_time =  service_start_time
-        self.service_time = generate_service_time(shape, scale)
-        self.service_end_time = service_start_time
-        self.wait = wait
-
-    def print_details(self):
-        """ Prints the details of the node. """
-        
-        print("arrival_time:", self.arrival_time)
-        print("service_start_time:", self.service_start_time)
-        print("service_time:", self.service_time)
-        print("service_end_time:", self.service_end_time)
-        print("wait:", self.wait)
-
 def Flag(waiting_times_summary, thres, times, interval_length, x): 
-    #Compare flag rate to threshold for each staffing period 
+    """ Compare flag rate to threshold for each staffing period. """
     for time in waiting_times_summary:
         waiting_times_summary[time] /= x
         if waiting_times_summary[time] > thres:
@@ -198,7 +191,7 @@ def Flag(waiting_times_summary, thres, times, interval_length, x):
     return True, None   
 
 def FlagLB(waiting_times_summary, thres, times, interval_length, x, time): 
-    #Compare flag rate to threshold for specific staffing period
+    """ Compare flag rate to threshold for specific staffing period. """
     waiting_times_summary[str(time)] /= x
     if waiting_times_summary[str(time)] > thres:
         return False
