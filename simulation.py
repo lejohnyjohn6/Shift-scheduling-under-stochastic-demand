@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Jan 13 10:36:05 2019
-
-@candidatenumber: 1032562
+Created on Dec 2018 
 """
 
 import numpy as np
@@ -43,6 +41,7 @@ def Simulate(node, rates, shapeGamma, scaleGamma, times, shiftMatrix,
     first staffing period at which the constraint has been violated. """
     
     waiting_times_summary = {}
+    
     # Simulate 'nbOccurences' times
     for occurence in range(nbOccurences):
         poissonParams = {}
