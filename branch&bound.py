@@ -15,6 +15,7 @@ import numpy as np
 from copy import deepcopy
 import pulp as plp
 import time as timeLib
+import simulation as simul
 
 class Node:
     
@@ -108,26 +109,6 @@ class Node:
         scp.solve()
         
         return plp.value(scp.objective), [v.varValue for v in scp.variables()]
-
-class Customer:
-    
-    def __init__(self, shape, scale, arrival_time, service_start_time=None,
-                 service_end_time=None, wait=None):
-        
-        self.arrival_time = arrival_time
-        self.service_start_time =  service_start_time
-        self.service_time = generate_service_time(shape, scale)
-        self.service_end_time = service_start_time
-        self.wait = wait
-
-    def print_details(self):
-        """ Prints the details of the node. """
-        
-        print("arrival_time:", self.arrival_time)
-        print("service_start_time:", self.service_start_time)
-        print("service_time:", self.service_time)
-        print("service_end_time:", self.service_end_time)
-        print("wait:", self.wait)
         
 """ Branch-and-bound methods """
 
@@ -173,118 +154,7 @@ def Branch(i, s, currentNode, sUB, sLB):
     
     return s, dNew, currentNode
 
-""" Simulation methods """
-
-def generate_service_time(shape, scale):
-    """ Generates 1 realisation of a gamma-distributed(shape, scale) random 
-    variable. This counts as the duration for a customer service. """
-    
-    return  np.random.gamma(shape, scale, 1)
-
-def Flag(waiting_times_summary, thres, times, interval_length, x): 
-    """ Compare flag rate to threshold for each staffing period. """
-    for time in waiting_times_summary:
-        waiting_times_summary[time] /= x
-        if waiting_times_summary[time] > thres:
-            return False, int(int(time)/interval_length)
-        
-    return True, None   
-
-def FlagLB(waiting_times_summary, thres, times, interval_length, x, time): 
-    """ Compare flag rate to threshold for specific staffing period. """
-    waiting_times_summary[str(time)] /= x
-    if waiting_times_summary[str(time)] > thres:
-        return False
-     
-    return True  
-  
-def Simulate(node, rates, shapeGamma, scaleGamma, times, shiftMatrix, 
-             tau, thres, x, interval_length): 
-    """ Simulates operations over the planning horizon with specified shift 
-    vector (repeats x times). Returns True if the quality service constraints
-    is satisfied. Otherwise, returns False and the index of the first staffing 
-    period at which the constraint has been violated. """
-    
-    waiting_times_summary = {}
-    # Simulate x times
-    for occurence in range(x):
-        poissonParams = {}
-        Customers=[]
-        count_per_interval = {}
-        
-        # Set workforce for each staffing period
-        for time in times:
-            n = int(time/interval_length)
-            count_per_interval[str(time)] = sum(shiftMatrix[:,n]*node.shift_vector)
-            
-        # Generate demand for each staffing period
-        for time in times:
-            # +1 to avoid no demand situation (demand = 0)
-            poissonParams[str(time)] = np.random.poisson(
-                    rates[times.index(time)]) + 1  
-        
-        # Create customers 
-        for time in times:
-            demand = poissonParams[str(time)]
-            for i in range(demand):
-                Customers.append(Customer(shapeGamma,
-                                          scaleGamma,
-                                          float(time)
-                                          )
-                )
-                
-        # Simulate queuing
-        time = times[0]
-        count = count_per_interval[str(time)]
-        workers = [time for i in range(int(count))]
-        
-        for i in range(len(Customers)):
-            if Customers[i].arrival_time > time:
-                time = int(Customers[i].arrival_time)
-                count = count_per_interval[str(time)]
-                workers = [time for t in range(int(count))] 
-            workers = sorted(workers)
-            
-            if workers[0] >= time + interval_length:
-                k = (workers[0] - time)//interval_length
-                time += k*interval_length
-                try:
-                    count = count_per_interval[str(int(time))]
-                    workers = [time for t in range(int(count))] 
-                except:
-                    for j in range(i,len(Customers)):
-                        Customers[j].wait = tau + 10000
-                    break
-            
-            start_time = workers[0]
-            Customers[i].service_start_time = start_time 
-            Customers[i].service_end_time = Customers[i].service_start_time + Customers[i].service_time
-            Customers[i].wait = Customers[i].service_start_time - Customers[i].arrival_time
-            workers[0] = Customers[i].service_end_time
-        
-        # Flag waiting times
-        demand_amplitude = deepcopy(poissonParams)
-        waiting_times = dict.fromkeys(list(demand_amplitude), 0)
-        for customer in Customers:
-            if customer.wait > tau:
-                waiting_times[str(int(customer.arrival_time))] += 1
-        for time in waiting_times:
-            waiting_times[time] /= demand_amplitude[time]
-            try:
-                waiting_times_summary[time] += waiting_times[time]
-            except:
-                waiting_times_summary[time] = waiting_times[time]
-    
-    return waiting_times_summary, thres, times, interval_length, x
-    
-def SimulationOutput(node, rates, shapeGamma, scaleGamma, times, 
-                     shiftMatrix, tau, thres, x, interval_length):
-    waiting_times_summary = Simulate(node, rates, shapeGamma, scaleGamma, 
-                                     times, shiftMatrix, tau, thres, x, 
-                                     interval_length)[0]
-    return Flag(waiting_times_summary, thres, times, interval_length, x)
-
-""" Main algorithm """
+""" Branch-and-bound method """
     
 def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix, 
          shiftCosts, staffingCosts, rates, shapeGamma, scaleGamma, times,
@@ -313,6 +183,7 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
                                capacities=root.increase_capacity(i,0)
                           ) 
             break
+            
     s = deepcopy(currentNode.capacities)
     currentNode.print_details()
      
@@ -320,22 +191,26 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
     d+=1
     while d > -1:
         print('depth: {}'.format(d))
-        # Challenge staffing cost  
+        
+        # Challenge staffing cost
         if currentNode.staffing_cost >= cost_w_star:
             # Fathom [Cs]
             print('# Fathom [Cs]')
             s, d, currentNode = Backtrack(s, d, currentNode, sUB, sLB)
+            
         else:
             # Solve set covering problem (LP relaxation)
             currentNode.lp_shift_cost = currentNode.optimize_lp(
                     shiftCosts, shiftMatrix, nbIntervals
                     )[0]
+            
             # Challenge (LP-optimized) shift cost
             if currentNode.lp_shift_cost >= cost_w_star:
                 # Fathom [CwLP]
                 print('# Fathom [CwLP]')
                 s[d] = deepcopy(sUB[d])
                 s, d, currentNode = Backtrack(s, d, currentNode, sUB, sLB)
+                
             else:
                 # Solve set covering problem (IP)
                 currentNode.shift_vector = currentNode.optimize_ip(
@@ -344,12 +219,14 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
                 currentNode.ip_shift_cost = currentNode.optimize_ip(
                     shiftCosts, shiftMatrix, nbIntervals
                     )[0]
+                
                 # Challenge (IP-optimized) shift cost
                 if currentNode.ip_shift_cost >= cost_w_star:
                     # Fathom [Cw]
                     print('# Fathom [Cw]')
                     s[d] = deepcopy(sUB[d])
                     s, d, currentNode = Backtrack(s, d, currentNode, sUB, sLB)
+                    
                 else:
                     # Check if w has been simulated before
                     if currentNode.shift_vector in infeasible_vectors:
@@ -368,24 +245,22 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
                             # Fathom [ie]
                             while d > ie:
                                 s[d] = sLB[d]
-                                if 1 > 0:
-                                #if currentNode.parent == root or currentNode.parent == 'root has no parent':
-                                    if currentNode.depth > 0:
-                                        currentNode = Node(staffingCosts,
-                                                               parent=root,
-                                                               depth=currentNode.depth-1,
-                                                               capacities=s)
-                                else:
-                                    currentNode = currentNode.parent
+                                if currentNode.depth > 0:
+                                    currentNode = Node(staffingCosts,
+                                                       parent=root,
+                                                       depth=currentNode.depth-1,
+                                                       capacities=s)
                                 d -= 1
                             s, d, currentNode = Backtrack(s, d, currentNode, sUB, sLB)
+                            
                     else:
                         # Check if w satisfies service level requirements
                         print('not simulated before')
-                        test, stop_index = SimulationOutput(currentNode, rates,
+                        test, stop_index = simul.Simulation(currentNode, rates,
                                                     shapeGamma, scaleGamma,
                                                     times, shiftMatrix, tau, thres,
-                                                    x, interval_length)  
+                                                    x, interval_length) 
+                        
                         # Update estimated optimum if w satisties service level req.
                         if test == True:
                             print('NEW STAR!')
@@ -396,6 +271,7 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
                             cost_w_star = currentNode.ip_shift_cost
                             s[d] = deepcopy(sUB[d])
                             s, d, currentNode = Backtrack(s, d, currentNode, sUB, sLB)
+                            
                         elif test == False: 
                             print('not new star')
                             ie = stop_index
@@ -405,6 +281,7 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
                                 print('# Branch [ie]')
                                 # Proceed to child node at depth ie
                                 s, d, currentNode = Branch(ie, s, currentNode, sUB, sLB)
+                                
                             else:
                                 print('# Fathom [ie]')
                                 # Fathom [ie]
@@ -417,6 +294,7 @@ def main(nbIntervals, interval_length, sInit, sLB, sUB, wInit, shiftMatrix,
                                                                parent=root,
                                                                depth=currentNode.depth-1,
                                                                capacities=s)
+                                            
                                     else:
                                         currentNode = currentNode.parent
                                     d -= 1
@@ -436,8 +314,8 @@ if __name__ == '__main__':
     times = [int_length*i for i in range(int((int(end[:2])-int(start[:2]))*delta))]
     
     # Demand rates
-    lambda0 = 5
-    R = 0.06
+    lambda0 = 10
+    R = 0.12
     c1 = 2*np.pi/(1*420)
     c2 = (np.pi/2)-600*c1/2
     rates = []
@@ -479,44 +357,10 @@ if __name__ == '__main__':
             if startTime <= times[j] < endTime:
                 shiftMatrix[i][j] = 1
     
-    # Vector inputs
-    timeOutputs = []
-    startComput = timeLib.time()
+    # Vector input sLB
     sLB = np.ones(len(times))
-    for time in times:
-        print(time)
-        if time not in [120, 180]:
-            continue
-        capacitiesTemp = 1000000*np.ones(len(times))
-        min_capacity = 1
-        capacitiesTemp[times.index(time)] = 1
-        node = Node(staffingCosts,
-                    parent='x',
-                    depth=0,
-                    capacities=capacitiesTemp
-               )
-        node.shift_vector = node.optimize_ip(
-                    shiftCosts, shiftMatrix, nbIntervals
-                    )[1]
-        flag = False
-        while flag == False:
-            waiting_times_summary = Simulate(node, rates, shapeGamma, 
-                         scaleGamma, times, shiftMatrix, 
-                         tau, thres, 5, int_length)[0] 
-            if FlagLB(waiting_times_summary, thres, times,
-                      int_length, 5, time) == True:
-                sLB[times.index(time)] = min_capacity
-                flag = True
-            else:
-                min_capacity += 1
-                node.capacities[times.index(time)] += 1   
-                node.shift_vector = node.optimize_ip(
-                    shiftCosts, shiftMatrix, nbIntervals
-                    )[1]
-    endComput = timeLib.time()
-    timeOutputs += [endComput-startComput]
     
-    startComput = timeLib.time()
+    # Vector input sUB
     sUB = np.zeros(len(times))
     for time in times:
         lamb = rates[times.index(time)]
@@ -528,9 +372,8 @@ if __name__ == '__main__':
             dummy *= lamb/(count+1)
             count += 1
         sUB[times.index(time)] = count
-    endComput = timeLib.time()
-    timeOutputs += [endComput-startComput]
     
+    # Vector input sInit
     sInit = deepcopy(sUB)
     nodeInit = Node(staffingCosts,
                     parent='x',
@@ -539,14 +382,11 @@ if __name__ == '__main__':
                )
     wInit = nodeInit.optimize_ip(
                     shiftCosts, shiftMatrix, nbIntervals
-                    )[1]  
+                    )[1] 
     
-    startComput = timeLib.time()
-    OptimizationOutput = main(nbIntervals, int_length, sInit, sLB, sUB, wInit,
+    # Problem solver
+    optimizationOutput = main(nbIntervals, int_length, sInit, sLB, sUB, wInit,
                               shiftMatrix, shiftCosts, staffingCosts, rates, 
                               shapeGamma, scaleGamma, times, tau, thres, 
                               simulOccurences)
-    endComput = timeLib.time()
-    timeOutputs += [endComput-startComput]
-    print(OptimizationOutput)
-    print(timeOutputs)
+    print(optimizationOutput)
