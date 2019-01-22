@@ -254,10 +254,10 @@ def main(nb_intervals, interval_length, s_init, s_lb, s_ub, w_init, shift_matrix
                         elif not test: 
                             print('not new star')
                             infeasible_vectors += [current_node.shift_vector]
-                            infeasible_stop_indexes += [index]
+                            infeasible_stop_indexes += [violation_index]
                             if current_depth < violation_index:
                                 print('# branch [ie]')
-                                # Proceed to child node at depth ie
+                                # Proceed to child node at depth "violation_index"
                                 current_staffing_vector, current_depth, current_node = branch(violation_index,
                                                                                               current_staffing_vector,
                                                                                               current_node,
@@ -268,8 +268,7 @@ def main(nb_intervals, interval_length, s_init, s_lb, s_ub, w_init, shift_matrix
                                 # fathom [ie]
                                 while current_depth > violation_index:
                                     current_staffing_vector[current_depth] = s_lb[current_depth]
-                                    if 0 > 1:
-                                    #if current_node.parent == root or current_node.parent == 'root has no parent':
+                                    if current_node.parent == root or current_node.parent == 'root has no parent':
                                         if current_node.depth > 0:
                                             current_node = Node(staffing_costs, 
                                                                 parent=root,
