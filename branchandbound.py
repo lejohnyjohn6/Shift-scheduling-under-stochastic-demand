@@ -3,7 +3,7 @@
 """
 Created on Dec 2018
 Author: John Pougué Biyong
-Contact: john.pougue-biyong@maths.ox.ac.uk
+Contact: jpougue@gmail.com
 
 This script aims at optimizing shift schedulling under stochastic demand
 by using a simulation-based branch-and-bound technique introduced by Defraeye et al. (2015)
@@ -234,7 +234,7 @@ def main(nb_intervals, interval_length, s_init, s_lb, s_ub, w_init, shift_matrix
                     else:
                         # Check if w satisfies service level requirements
                         print('not simulated before')
-                        test, violation_index = simul.Simulate(current_node, rates, shape_gamma, scale_gamma, times, 
+                        test, violation_index = simul.simulate(current_node, rates, shape_gamma, scale_gamma, times, 
                                                                shift_matrix, tau, thres, simulation_occurences,
                                                                interval_length) 
                         # Update estimated optimum if w satisties service level req.
