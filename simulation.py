@@ -5,7 +5,7 @@ Created on Dec 2018
 Author: John Pougué Biyong
 Contact: jpougue@gmail.com
 
-This module gathers supporting functions for the branh-and-bound method.
+This module gathers support functions for the branh-and-bound method.
 Please refer to project report for further details.
 
 """
@@ -14,8 +14,8 @@ from copy import deepcopy
 import numpy as np
 
 def generate_service_time(shape, scale=1):
-    """ Generates 1 realisation of a exponential-distributed random 
-    variable. This counts as the duration for a customer service. """
+    """ Generates 1 realisation of a exponential-distributed random variable. 
+    This counts as the duration for a customer service. """
     return  np.random.gamma(shape, scale, 1)
 
 class Customer:
