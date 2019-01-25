@@ -116,7 +116,7 @@ def backtrack(current_staffing_vector, current_depth, current_node, s_ub, s_lb):
     return current_staffing_vector, current_depth, current_node
 
 def branch(i, current_staffing_vector, current_node, s_ub, s_lb):
-    """ branches to child node on level i. """
+    """ Branches to child node on level i. """
     d_new = i
     current_node = Node(STAFFING_COSTS,
                         parent=current_node,
@@ -139,8 +139,7 @@ def branch(i, current_staffing_vector, current_node, s_ub, s_lb):
     
 def main(nb_intervals, interval_length, s_init, s_lb, s_ub, w_init, shift_matrix, shift_costs, staffing_costs, 
          rates, shape_gamma, scale_gamma, times, tau, thres, simulation_occurences):   
-    """ Optimizes shift schedulling by using a branch-and-bound technique 
-    coupled with simulation. """
+    """ Optimizes shift schedulling by using a branch-and-bound technique coupled with simulation. """
     # Initialization
     w_star = w_init
     s_tilde_w_star = s_init 
