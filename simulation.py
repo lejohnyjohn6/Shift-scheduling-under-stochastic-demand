@@ -5,7 +5,7 @@ Created on Dec 2018
 Author: John Pougué Biyong
 Contact: jpougue@gmail.com
 
-This module gathers support functions for the branh-and-bound method.
+This module gathers support functions for the branch-and-bound method.
 Please refer to project report for further details.
 
 """
